@@ -1407,28 +1407,49 @@ function fallbackCopy(text, done) {
 // PREVIEW (via proxy or CORS workaround)
 // ============================================
 
+// Fetch with an abort timeout so a hung request can't stall the preview.
+async function fetchWithTimeout(u, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(u, { signal: ctrl.signal });
+    if (!res.ok) throw new Error('status ' + res.status);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function fetchPreview(url) {
   const previewArea = document.getElementById('previewArea');
   previewArea.innerHTML = '<div class="preview-loading"><div class="spinner"></div><br>Fetching feed...</div>';
 
-  try {
-    // Try Netlify function proxy first, fall back to allorigins
-    let xmlText;
-    try {
-      const proxyUrl = `/.netlify/functions/fetch-rss?url=${encodeURIComponent(url)}`;
-      const res = await fetch(proxyUrl);
-      if (res.ok) {
-        xmlText = await res.text();
-      } else {
-        throw new Error('Proxy failed');
-      }
-    } catch {
-      // Fallback: use allorigins CORS proxy
-      const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const res = await fetch(fallbackUrl);
-      xmlText = await res.text();
-    }
+  const proxyUrl = `/.netlify/functions/fetch-rss?url=${encodeURIComponent(url)}`;
+  let xmlText = null;
 
+  // Try our own proxy first, retrying once — the Netlify function can be slow
+  // on a cold start, which previously surfaced as a one-off "couldn't load".
+  for (let attempt = 0; attempt < 2 && xmlText === null; attempt++) {
+    try {
+      xmlText = await fetchWithTimeout(proxyUrl, 12000);
+    } catch (e) {
+      if (attempt === 0) await new Promise(r => setTimeout(r, 400));
+    }
+  }
+
+  // Last resort: third-party CORS proxy.
+  if (xmlText === null) {
+    try {
+      xmlText = await fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), 12000);
+    } catch (e) { xmlText = null; }
+  }
+
+  if (xmlText === null) {
+    previewArea.innerHTML = `<div class="preview-empty">Couldn't load a live preview, but your RSS URL is still valid. Paste it into your reader.</div>`;
+    return;
+  }
+
+  try {
     const parser = new DOMParser();
     const xml = parser.parseFromString(xmlText, 'text/xml');
     const items = xml.querySelectorAll('item');
