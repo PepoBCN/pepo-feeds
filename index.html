@@ -979,65 +979,10 @@
     </div>
   </div>
 
-  <!-- Divider -->
-  <div class="divider"></div>
-
-  <!-- Email Digest Section -->
-  <div class="digest-section">
-    <h2>Email digest <span class="badge">Preview only</span></h2>
-    <p>Design how your briefing will look. Automated delivery isn't live yet, your settings are saved in this browser so they're ready when it is.</p>
-
-    <div class="tab-row" role="tablist" aria-label="Email digest views">
-      <button class="tab-btn active" id="tab-btn-configure" role="tab" aria-selected="true" aria-controls="tab-configure" data-tab="configure" onclick="switchTab('configure')">Configure</button>
-      <button class="tab-btn" id="tab-btn-preview-email" role="tab" aria-selected="false" aria-controls="tab-preview-email" data-tab="preview-email" onclick="switchTab('preview-email')">Preview</button>
-    </div>
-
-    <div class="tab-panel active" id="tab-configure" role="tabpanel" aria-labelledby="tab-btn-configure">
-      <div class="card" style="margin-bottom: 0.75rem;">
-        <label class="card-label" for="digestTitle">Briefing title</label>
-        <input type="text" id="digestTitle" placeholder="e.g. AI & Financial Services Daily Briefing" value="">
-      </div>
-
-      <div class="digest-grid">
-        <div class="card">
-          <label class="card-label" for="digestHeader">Header (top)</label>
-          <textarea id="digestHeader" placeholder="Custom intro text that appears at the top of each email..."></textarea>
-        </div>
-        <div class="card">
-          <label class="card-label" for="digestFooter">Footer (tail)</label>
-          <textarea id="digestFooter" placeholder="e.g. Produced by Your Company.&#10;For internal use only."></textarea>
-        </div>
-      </div>
-
-      <div class="digest-grid" style="margin-top: 0.75rem;">
-        <div class="card">
-          <label class="card-label" for="digestEmail">Deliver to</label>
-          <input type="email" id="digestEmail" placeholder="you@example.com">
-        </div>
-        <div class="card">
-          <label class="card-label" for="digestSchedule">Schedule</label>
-          <select id="digestSchedule" class="styled-select">
-            <option value="daily-morning">Daily at 7am</option>
-            <option value="daily-evening">Daily at 6pm</option>
-            <option value="weekly-monday">Weekly (Monday morning)</option>
-            <option value="weekly-friday">Weekly (Friday morning)</option>
-          </select>
-        </div>
-      </div>
-
-      <div style="margin-top: 1rem; text-align: right;">
-        <button class="btn" id="digestSaveBtn" onclick="saveDigestConfig()">Save digest settings</button>
-      </div>
-    </div>
-
-    <div class="tab-panel" id="tab-preview-email" role="tabpanel" aria-labelledby="tab-btn-preview-email">
-      <div class="card">
-        <div class="email-preview" id="emailPreview">
-          <p style="color: #888; text-align: center;">Configure your digest above, then switch to Preview to see how it'll look.</p>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Email digest section parked for now — removed from the UI.
+       Full markup + JS (switchTab / renderEmailPreview / saveDigestConfig)
+       and CSS (.digest-section, .email-preview, .tab-*) live in git history
+       at commit 3a73924 and earlier, ready to reinstate later. -->
 </div>
 
 <!-- Toast -->
@@ -1566,102 +1511,9 @@ function renderPreview() {
   previewArea.innerHTML = html;
 }
 
-// ============================================
-// EMAIL DIGEST
-// ============================================
-
-function switchTab(tabName) {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    const on = btn.dataset.tab === tabName;
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-selected', on ? 'true' : 'false');
-  });
-  document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
-  document.getElementById(`tab-${tabName}`).classList.add('active');
-
-  if (tabName === 'preview-email') {
-    renderEmailPreview();
-  }
-}
-
-function renderEmailPreview() {
-  const preview = document.getElementById('emailPreview');
-  const title = document.getElementById('digestTitle').value || 'Your Daily Briefing';
-  const header = document.getElementById('digestHeader').value;
-  const footer = document.getElementById('digestFooter').value;
-  const query = buildQuery();
-
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-  let html = '';
-
-  // Header
-  html += `<h2>${escapeHtml(title)}</h2>`;
-  html += `<div class="ep-date">${escapeHtml(dateStr)}</div>`;
-
-  if (header) {
-    html += `<div class="ep-header-custom">${escapeHtml(header)}</div>`;
-  }
-
-  // Articles
-  if (articles.length > 0) {
-    html += `<div class="ep-section-header">Latest Coverage</div>`;
-    articles.slice(0, 6).forEach((a, i) => {
-      const date = a.pubDate ? new Date(a.pubDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-      html += `
-        <div class="ep-item">
-          <div class="ep-item-title">${i + 1}. ${escapeHtml(a.title)}</div>
-          ${date ? `<div class="ep-item-date">Date: ${escapeHtml(date)}</div>` : ''}
-          ${a.snippet ? `<div class="ep-item-snippet">${escapeHtml(a.snippet)}</div>` : ''}
-          ${a.source ? `<div class="ep-item-source">Source: ${escapeHtml(a.source)}</div>` : ''}
-        </div>
-      `;
-    });
-  } else if (query) {
-    html += `<div class="ep-section-header">Latest Coverage</div>`;
-    html += `<p style="color: #888; font-style: italic;">Articles matching "${escapeHtml(query)}" will appear here.</p>`;
-  } else {
-    html += `<p style="color: #888; font-style: italic;">Set up your search terms above to see articles here.</p>`;
-  }
-
-  // Footer
-  html += `<div class="ep-footer">`;
-  if (footer) {
-    html += `<div class="ep-footer-custom">${escapeHtml(footer)}</div>`;
-  } else {
-    html += `Produced by Kirkham Feeds.`;
-  }
-  html += `</div>`;
-
-  preview.innerHTML = html;
-}
-
-function saveDigestConfig() {
-  const email = document.getElementById('digestEmail').value;
-  if (!email) {
-    showToast('Please enter an email address');
-    return;
-  }
-  if (!buildQuery()) {
-    showToast('Please enter a search term first');
-    return;
-  }
-
-  const config = {
-    query: buildQuery(),
-    rssUrl: buildUrl(),
-    title: document.getElementById('digestTitle').value,
-    header: document.getElementById('digestHeader').value,
-    footer: document.getElementById('digestFooter').value,
-    email: email,
-    schedule: document.getElementById('digestSchedule').value,
-  };
-
-  // Store locally for now
-  localStorage.setItem('kirkham_feeds_digest', JSON.stringify(config));
-  showToast('Digest settings saved. Email delivery coming soon.');
-}
+// Email digest logic parked — see the note in the markup above. The
+// switchTab / renderEmailPreview / saveDigestConfig functions live in git
+// history (commit 3a73924) and come back with the UI when we revisit it.
 
 // ============================================
 // UTILS
