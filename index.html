@@ -913,6 +913,81 @@
       cursor: pointer;
     }
     .inline-add .inline-add-go:hover { background: var(--accent-hover); }
+
+    /* Save-feed form + saved feeds list */
+    .save-form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+    .save-form input[type="text"] {
+      flex: 1;
+      min-width: 11rem;
+      padding: 0.55rem 0.75rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+    }
+    .save-form input[type="text"]:focus { border-color: var(--border-focus); }
+    .save-form .styled-select { width: auto; min-width: 9rem; flex: 0 0 auto; }
+    .saved-folder { margin-bottom: 1.1rem; }
+    .saved-folder:last-child { margin-bottom: 0; }
+    .saved-folder-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .saved-folder-name {
+      font-family: var(--serif);
+      font-size: 1.02rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .saved-folder-count {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .saved-folder-del {
+      background: none; border: none; cursor: pointer;
+      font-size: 0.72rem; color: var(--text-dim); font-family: inherit;
+    }
+    .saved-folder-del:hover { color: var(--red); }
+    .saved-feed-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .saved-feed-item:last-child { border-bottom: none; }
+    .saved-feed-name { flex: 1; min-width: 0; font-size: 0.9rem; color: var(--text); }
+    .saved-feed-actions { display: flex; gap: 0.35rem; flex-shrink: 0; }
+    .saved-feed-actions button {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 0.3rem 0.7rem;
+      font-size: 0.74rem;
+      font-family: inherit;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .saved-feed-actions button:hover { border-color: var(--accent); color: var(--accent); }
+    .saved-feed-actions .sf-del:hover { border-color: var(--red); color: var(--red); }
   </style>
 </head>
 <body>
@@ -1126,7 +1201,15 @@
     <div class="url-output">
       <div class="url-box" id="urlBox">Enter a search term above...</div>
       <button class="btn btn-sm" id="copyBtn" onclick="copyUrl()">Copy</button>
+      <button class="btn btn-sm btn-outline" id="saveBtn" onclick="toggleSaveForm()">Save</button>
       <span class="copied-msg" id="copiedMsg">Copied</span>
+    </div>
+    <!-- Inline "save this feed" form -->
+    <div class="save-form" id="saveForm" style="display:none;">
+      <input type="text" id="saveFeedName" placeholder="Name this feed, e.g. Arsenal transfers" aria-label="Feed name">
+      <select id="saveFolderSelect" class="styled-select" aria-label="Folder" onchange="toggleNewFolderInput()"></select>
+      <input type="text" id="newFolderName" placeholder="New folder name" aria-label="New folder name" style="display:none;">
+      <button type="button" class="inline-add-go" onclick="commitSaveFeed()">Save feed</button>
     </div>
   </div>
 
@@ -1136,6 +1219,12 @@
     <div id="previewArea">
       <div class="preview-empty">Type a search term to see a live preview of your feed</div>
     </div>
+  </div>
+
+  <!-- Saved feeds (localStorage; organised into folders) -->
+  <div class="card" id="savedCard" style="display:none;">
+    <div class="card-label">Saved feeds</div>
+    <div id="savedFeeds"></div>
   </div>
 
   <!-- Email digest section parked for now — removed from the UI.
@@ -2057,8 +2146,172 @@ document.getElementById('langSelect').addEventListener('change', updateUrl);
 document.getElementById('countrySelect').addEventListener('change', updateUrl);
 document.getElementById('whenSelect').addEventListener('change', updateUrl);
 
+// ============================================
+// SAVED FEEDS (localStorage, organised in folders)
+// ============================================
+const SAVED_KEY = 'kirkham_saved_v1';
+let saved = (() => { try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || { folders: [], feeds: [] }; } catch { return { folders: [], feeds: [] }; } })();
+function persistSaved() { try { localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); } catch {} }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+// Snapshot every part of the builder so a saved feed restores exactly.
+function currentBuilderState() {
+  return {
+    trackTerms: [...trackTerms],
+    andGroups: andGroups.map(g => [...g]),
+    phraseTerms: [...phraseTerms],
+    excludeTerms: [...excludeTerms],
+    siteTerms: [...siteTerms],
+    excludeSiteTerms: [...excludeSiteTerms],
+    lang: document.getElementById('langSelect').value,
+    country: document.getElementById('countrySelect').value,
+    when: document.getElementById('whenSelect').value,
+  };
+}
+
+function condHasContent(t) {
+  return ({
+    also: (andGroups[0] || []).length,
+    sites: siteTerms.length,
+    phrase: phraseTerms.length,
+    exclude: excludeTerms.length,
+    exsites: excludeSiteTerms.length,
+  }[t] || 0) > 0;
+}
+
+function applyBuilderState(s) {
+  trackTerms = [...(s.trackTerms || [])];
+  andGroups = (s.andGroups || []).map(g => [...g]);
+  phraseTerms = [...(s.phraseTerms || [])];
+  excludeTerms = [...(s.excludeTerms || [])];
+  siteTerms = [...(s.siteTerms || [])];
+  excludeSiteTerms = [...(s.excludeSiteTerms || [])];
+  document.getElementById('searchInput').value = '';
+  if (s.lang) document.getElementById('langSelect').value = s.lang;
+  if (s.country) document.getElementById('countrySelect').value = s.country;
+  if (s.when !== undefined) document.getElementById('whenSelect').value = s.when;
+  ['also', 'sites', 'phrase', 'exclude', 'exsites'].forEach(t => {
+    document.getElementById('cond-' + t).style.display = condHasContent(t) ? '' : 'none';
+  });
+  renderTrackChips();
+  renderAlsoChips(); renderSiteChips(); renderPhraseChips(); renderExcludeChips(); renderExSiteChips();
+  refreshCondPalette();
+  showSuggestions();
+  updateUrl();
+}
+
+function toggleSaveForm() {
+  if (!buildQuery()) { showToast('Build a feed first'); return; }
+  const f = document.getElementById('saveForm');
+  const showing = f.style.display !== 'none';
+  f.style.display = showing ? 'none' : 'flex';
+  if (!showing) { populateFolderSelect(); document.getElementById('saveFeedName').focus(); }
+}
+
+function populateFolderSelect() {
+  const sel = document.getElementById('saveFolderSelect');
+  sel.innerHTML = '';
+  saved.folders.forEach(fo => {
+    const o = document.createElement('option'); o.value = fo.id; o.textContent = fo.name; sel.appendChild(o);
+  });
+  const o = document.createElement('option'); o.value = '__new__'; o.textContent = saved.folders.length ? '+ New folder…' : 'New folder…';
+  sel.appendChild(o);
+  if (!saved.folders.length) sel.value = '__new__';
+  toggleNewFolderInput();
+}
+
+function toggleNewFolderInput() {
+  const sel = document.getElementById('saveFolderSelect');
+  document.getElementById('newFolderName').style.display = (sel.value === '__new__') ? '' : 'none';
+}
+
+function commitSaveFeed() {
+  const name = document.getElementById('saveFeedName').value.trim();
+  if (!name) { showToast('Give the feed a name'); return; }
+  const sel = document.getElementById('saveFolderSelect');
+  let folderId;
+  if (sel.value === '__new__') {
+    const fn = document.getElementById('newFolderName').value.trim() || 'My feeds';
+    const fo = { id: uid(), name: fn }; saved.folders.push(fo); folderId = fo.id;
+  } else {
+    folderId = sel.value;
+  }
+  saved.feeds.push({ id: uid(), name, folderId, url: buildUrl(), state: currentBuilderState() });
+  persistSaved();
+  document.getElementById('saveForm').style.display = 'none';
+  document.getElementById('saveFeedName').value = '';
+  document.getElementById('newFolderName').value = '';
+  renderSavedFeeds();
+  showToast('Feed saved');
+}
+
+function loadSavedFeed(id) {
+  const f = saved.feeds.find(x => x.id === id);
+  if (!f) return;
+  applyBuilderState(f.state);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast('Loaded “' + f.name + '”');
+}
+
+function copySavedUrl(id) {
+  const f = saved.feeds.find(x => x.id === id);
+  if (!f || !f.url) return;
+  const done = () => showToast('RSS URL copied');
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(f.url).then(done).catch(() => fallbackCopy(f.url, done));
+  else fallbackCopy(f.url, done);
+}
+
+function deleteSavedFeed(id) {
+  saved.feeds = saved.feeds.filter(x => x.id !== id);
+  persistSaved();
+  renderSavedFeeds();
+}
+
+function deleteFolder(id) {
+  const fo = saved.folders.find(x => x.id === id);
+  const n = saved.feeds.filter(f => f.folderId === id).length;
+  if (n && !confirm('Delete “' + (fo ? fo.name : 'folder') + '” and its ' + n + ' feed' + (n > 1 ? 's' : '') + '?')) return;
+  saved.feeds = saved.feeds.filter(f => f.folderId !== id);
+  saved.folders = saved.folders.filter(x => x.id !== id);
+  persistSaved();
+  renderSavedFeeds();
+}
+
+function renderSavedFeeds() {
+  const card = document.getElementById('savedCard');
+  const wrap = document.getElementById('savedFeeds');
+  if (!saved.feeds.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  wrap.innerHTML = '';
+  saved.folders.forEach(fo => {
+    const feeds = saved.feeds.filter(f => f.folderId === fo.id);
+    if (!feeds.length) return;
+    const block = document.createElement('div'); block.className = 'saved-folder';
+    const head = document.createElement('div'); head.className = 'saved-folder-head';
+    const nameSpan = document.createElement('span'); nameSpan.className = 'saved-folder-name';
+    nameSpan.innerHTML = '📁 ' + escapeHtml(fo.name) + ' <span class="saved-folder-count">' + feeds.length + '</span>';
+    const delF = document.createElement('button'); delF.className = 'saved-folder-del'; delF.textContent = 'Delete folder';
+    delF.onclick = () => deleteFolder(fo.id);
+    head.appendChild(nameSpan); head.appendChild(delF);
+    block.appendChild(head);
+    feeds.forEach(f => {
+      const item = document.createElement('div'); item.className = 'saved-feed-item';
+      const nm = document.createElement('span'); nm.className = 'saved-feed-name'; nm.textContent = f.name;
+      const acts = document.createElement('div'); acts.className = 'saved-feed-actions';
+      const loadB = document.createElement('button'); loadB.textContent = 'Load'; loadB.onclick = () => loadSavedFeed(f.id);
+      const copyB = document.createElement('button'); copyB.textContent = 'Copy URL'; copyB.onclick = () => copySavedUrl(f.id);
+      const delB = document.createElement('button'); delB.className = 'sf-del'; delB.textContent = '×'; delB.setAttribute('aria-label', 'Delete ' + f.name); delB.onclick = () => deleteSavedFeed(f.id);
+      acts.appendChild(loadB); acts.appendChild(copyB); acts.appendChild(delB);
+      item.appendChild(nm); item.appendChild(acts);
+      block.appendChild(item);
+    });
+    wrap.appendChild(block);
+  });
+}
+
 // Init
 updateUrl();
+renderSavedFeeds();
 
 // Focus the search box on load, but only on wider screens so mobile
 // doesn't get an unsolicited keyboard pop.
