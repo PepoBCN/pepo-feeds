@@ -264,52 +264,87 @@
     .summary-sentence .s-not { font-weight: 600; color: var(--red); }
     .summary-sentence .s-join { color: var(--text-muted); }
 
-    /* Condition rows */
-    .cond-row {
-      margin-bottom: 0.75rem;
-      padding: 0.75rem 0.85rem;
-      background: var(--bg-sunken);
-      border: 1px solid var(--border);
+    /* Rule stack — each requirement is a card. Across a card = "or",
+       down the spine between cards = "and". Both operators stay visible. */
+    .rule-stack { margin-top: 0.25rem; }
+    .rule-card {
+      padding: 0.8rem 0.9rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm);
     }
-    .cond-head {
+    .rule-card-exclude { border-color: var(--red-dim); }
+    .rule-head {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      align-items: baseline;
       gap: 0.5rem;
     }
-    .cond-label {
-      font-size: 0.7rem;
-      font-weight: 600;
+    .rule-title {
+      font-size: 0.72rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--text-muted);
+      color: var(--text);
     }
-    .cond-label .cond-hint {
-      text-transform: none;
-      letter-spacing: 0;
-      font-weight: 400;
+    .rule-anyof {
+      font-size: 0.72rem;
       color: var(--text-dim);
+      margin-left: auto;
+      white-space: nowrap;
     }
     .cond-remove {
       background: none;
       border: none;
       color: var(--text-dim);
-      font-size: 0.95rem;
+      font-size: 1.05rem;
       line-height: 1;
       cursor: pointer;
-      padding: 0.1rem 0.3rem;
+      padding: 0 0.1rem;
+      margin-left: 0.4rem;
     }
     .cond-remove:hover { color: var(--red); }
-    .cond-chips {
+    .rule-chips {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.4rem;
-      margin-top: 0.55rem;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.6rem;
     }
-    .cond-chips:empty { margin-top: 0; }
+    .rule-chips:empty { margin-top: 0; }
+    .or-sep {
+      font-size: 0.74rem;
+      font-style: italic;
+      color: var(--text-dim);
+      padding: 0 0.05rem;
+    }
+    .rule-empty {
+      margin-top: 0.55rem;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
 
-    /* Chip colour variants reused across condition rows */
+    /* "AND" spine between stacked cards */
+    .and-spine {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 0;
+    }
+    .and-spine::before, .and-spine::after {
+      content: '';
+      height: 1px;
+      background: var(--border-strong);
+      flex: 1;
+    }
+    .and-spine span {
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* Chip colour variants reused across rule cards */
     .chip-site { background: var(--orange-dim); color: var(--orange); }
     .chip-site:hover { background: var(--orange); color: #fff; }
     .chip-phrase { background: var(--accent-dim); color: var(--accent); }
@@ -863,85 +898,106 @@
   <div class="card">
     <label class="card-label" for="searchInput">1. What do you want to track?</label>
     <div class="search-wrap">
-      <input type="text" id="searchInput" placeholder="e.g. Arsenal, artificial intelligence, Tesla..." aria-label="Search term">
+      <input type="text" id="searchInput" placeholder="Type a word and press Enter…" aria-label="Search term" autocomplete="off">
       <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
     </div>
     <div class="suggestions" id="suggestions"></div>
-    <div class="inline-add" id="customAddRow" style="display:none;">
-      <input type="text" id="customAddInput" placeholder="Add a search variation…" aria-label="Custom search variation">
-      <button type="button" class="inline-add-go" onclick="commitCustomTerm()">Add</button>
-    </div>
 
-    <!-- Conditions builder (visible once there's something to track) -->
+    <!-- Conditions builder: stacked rule cards. Across a card = "or", down the spine = "and". -->
     <div class="query-controls" id="queryControls">
-      <!-- Live plain-English summary of the feed being built -->
-      <p class="summary-sentence" id="summarySentence"></p>
+      <div class="rule-stack">
+        <!-- Track group (always present) -->
+        <div class="rule-card" id="card-track">
+          <div class="rule-head">
+            <span class="rule-title">Must mention</span>
+            <span class="rule-anyof">any of these</span>
+          </div>
+          <div class="rule-chips" id="trackChips"></div>
+          <div class="rule-empty" id="trackEmpty">Type a word above and press Enter to add it.</div>
+        </div>
 
-      <!-- Condition rows, each revealed from the "+ Add a condition" palette -->
-      <div id="conditions">
         <!-- Must also mention (extra AND-group) -->
-        <div class="cond-row" id="cond-also" data-cond="also" style="display:none;">
-          <div class="cond-head">
-            <span class="cond-label">Must also mention <span class="cond-hint">— narrows the feed (AND)</span></span>
-            <button type="button" class="cond-remove" aria-label="Remove this condition" onclick="removeCondition('also')">×</button>
-          </div>
-          <div class="cond-chips" id="alsoChips"></div>
-          <div class="inline-add" id="alsoAddRow" style="display:none;">
-            <input type="text" id="alsoAddInput" placeholder="Add a word it must also mention…" aria-label="Word the article must also mention">
-            <button type="button" class="inline-add-go" onclick="commitAlsoTerm()">Add</button>
-          </div>
-        </div>
-
-        <!-- Exact phrase -->
-        <div class="cond-row" id="cond-phrase" data-cond="phrase" style="display:none;">
-          <div class="cond-head">
-            <span class="cond-label">Exact phrase <span class="cond-hint">— must appear word-for-word</span></span>
-            <button type="button" class="cond-remove" aria-label="Remove this condition" onclick="removeCondition('phrase')">×</button>
-          </div>
-          <div class="cond-chips" id="phraseChips"></div>
-          <div class="inline-add" id="phraseAddRow" style="display:none;">
-            <input type="text" id="phraseAddInput" placeholder="e.g. Mikel Arteta" aria-label="Exact phrase">
-            <button type="button" class="inline-add-go" onclick="commitPhraseTerm()">Add</button>
-          </div>
-        </div>
-
-        <!-- Exclude -->
-        <div class="cond-row" id="cond-exclude" data-cond="exclude" style="display:none;">
-          <div class="cond-head">
-            <span class="cond-label">Exclude <span class="cond-hint">— hide articles mentioning these</span></span>
-            <button type="button" class="cond-remove" aria-label="Remove this condition" onclick="removeCondition('exclude')">×</button>
-          </div>
-          <div class="cond-chips" id="excludeChips"></div>
-          <div class="inline-add" id="excludeAddRow" style="display:none;">
-            <input type="text" id="excludeAddInput" placeholder="Exclude articles mentioning…" aria-label="Term to exclude">
-            <button type="button" class="inline-add-go" onclick="commitExcludeTerm()">Exclude</button>
+        <div class="and-block" id="cond-also" data-cond="also" style="display:none;">
+          <div class="and-spine"><span>and</span></div>
+          <div class="rule-card">
+            <div class="rule-head">
+              <span class="rule-title">Must also mention</span>
+              <span class="rule-anyof">any of these</span>
+              <button type="button" class="cond-remove" aria-label="Remove this rule" onclick="removeCondition('also')">×</button>
+            </div>
+            <div class="rule-chips" id="alsoChips"></div>
+            <div class="inline-add" id="alsoAddRow">
+              <input type="text" id="alsoAddInput" placeholder="Add a word…" aria-label="Word the article must also mention">
+              <button type="button" class="inline-add-go" onclick="commitAlsoTerm()">Add</button>
+            </div>
           </div>
         </div>
 
         <!-- Only from these sites -->
-        <div class="cond-row" id="cond-sites" data-cond="sites" style="display:none;">
-          <div class="cond-head">
-            <span class="cond-label">Only from these sites <span class="cond-hint">— limit to chosen publishers</span></span>
-            <button type="button" class="cond-remove" aria-label="Remove this condition" onclick="removeCondition('sites')">×</button>
+        <div class="and-block" id="cond-sites" data-cond="sites" style="display:none;">
+          <div class="and-spine"><span>and</span></div>
+          <div class="rule-card">
+            <div class="rule-head">
+              <span class="rule-title">Only from these sites</span>
+              <span class="rule-anyof">any of these</span>
+              <button type="button" class="cond-remove" aria-label="Remove this rule" onclick="removeCondition('sites')">×</button>
+            </div>
+            <div class="rule-chips" id="siteChips"></div>
+            <div class="inline-add" id="siteAddRow">
+              <input type="text" id="siteAddInput" placeholder="e.g. bbc.co.uk" aria-label="Site domain">
+              <button type="button" class="inline-add-go" onclick="commitSiteTerm()">Add</button>
+            </div>
           </div>
-          <div class="cond-chips" id="siteChips"></div>
-          <div class="inline-add" id="siteAddRow" style="display:none;">
-            <input type="text" id="siteAddInput" placeholder="e.g. bbc.co.uk" aria-label="Site domain">
-            <button type="button" class="inline-add-go" onclick="commitSiteTerm()">Add</button>
+        </div>
+
+        <!-- Exact phrase -->
+        <div class="and-block" id="cond-phrase" data-cond="phrase" style="display:none;">
+          <div class="and-spine"><span>and</span></div>
+          <div class="rule-card">
+            <div class="rule-head">
+              <span class="rule-title">Exact phrase</span>
+              <span class="rule-anyof">word-for-word</span>
+              <button type="button" class="cond-remove" aria-label="Remove this rule" onclick="removeCondition('phrase')">×</button>
+            </div>
+            <div class="rule-chips" id="phraseChips"></div>
+            <div class="inline-add" id="phraseAddRow">
+              <input type="text" id="phraseAddInput" placeholder="e.g. Mikel Arteta" aria-label="Exact phrase">
+              <button type="button" class="inline-add-go" onclick="commitPhraseTerm()">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exclude -->
+        <div class="and-block" id="cond-exclude" data-cond="exclude" style="display:none;">
+          <div class="and-spine"><span>and</span></div>
+          <div class="rule-card rule-card-exclude">
+            <div class="rule-head">
+              <span class="rule-title">Exclude</span>
+              <span class="rule-anyof">hide any of these</span>
+              <button type="button" class="cond-remove" aria-label="Remove this rule" onclick="removeCondition('exclude')">×</button>
+            </div>
+            <div class="rule-chips" id="excludeChips"></div>
+            <div class="inline-add" id="excludeAddRow">
+              <input type="text" id="excludeAddInput" placeholder="Word to exclude…" aria-label="Term to exclude">
+              <button type="button" class="inline-add-go" onclick="commitExcludeTerm()">Exclude</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- "+ Add a condition" control -->
+      <!-- + Add another rule -->
       <div class="add-condition">
-        <button type="button" class="add-cond-toggle" id="addCondToggle" onclick="toggleCondPalette()">+ Add a condition</button>
+        <button type="button" class="add-cond-toggle" id="addCondToggle" onclick="toggleCondPalette()">+ Add another rule</button>
         <div class="add-cond-palette" id="addCondPalette">
           <button type="button" class="add-cond-opt" data-target="also" onclick="openCondition('also')">+ Must also mention</button>
+          <button type="button" class="add-cond-opt" data-target="sites" onclick="openCondition('sites')">+ Only from these sites</button>
           <button type="button" class="add-cond-opt" data-target="phrase" onclick="openCondition('phrase')">+ Exact phrase</button>
           <button type="button" class="add-cond-opt" data-target="exclude" onclick="openCondition('exclude')">− Exclude</button>
-          <button type="button" class="add-cond-opt" data-target="sites" onclick="openCondition('sites')">+ Only from these sites</button>
         </div>
       </div>
+
+      <!-- Live plain-English read-back -->
+      <p class="summary-sentence" id="summarySentence"></p>
 
       <!-- Technical query string, tucked behind a toggle -->
       <details class="query-preview" id="queryPreview">
@@ -1115,13 +1171,13 @@ const SUGGESTIONS = {
 // ============================================
 // Query model:
 //   include = an array of OR-groups that are AND-ed together.
-//     group[0] is the main "track" box (searchInput + suggestion chips + custom variations).
+//     group[0] is the "Must mention" card: committed track chips + whatever is
+//     currently typed in the box (so the preview updates live before you commit).
 //     andGroups holds the extra "Must also mention" OR-groups (one for now, modelled for many).
 //   phraseTerms = exact phrases (each always quoted, AND-ed).
 //   excludeTerms = terms to exclude (-term).
 //   siteTerms = publisher domains (compiled to one site: OR-group).
-let selectedTerms = [];   // suggestion chips feeding group[0]
-let customTerms = [];     // custom variations feeding group[0]
+let trackTerms = [];      // committed OR chips in the "Must mention" card
 let andGroups = [];       // extra AND-ed OR-groups; andGroups[0] = "Must also mention"
 let phraseTerms = [];
 let excludeTerms = [];
@@ -1190,11 +1246,21 @@ function trackGroupTerms() {
     seen.add(key);
     terms.push(t);
   };
-  const base = getSearchTerm();
-  if (base) push(base);
-  selectedTerms.forEach(push);
-  customTerms.forEach(push);
+  trackTerms.forEach(push);
+  const live = getSearchTerm();   // the word being typed but not yet committed
+  if (live) push(live);
   return terms;
+}
+
+// Commit whatever's in the search box as a track chip, then clear the box.
+// Called on Enter, and before adding a suggestion, so a typed word is never lost.
+function commitTrackInput() {
+  const input = document.getElementById('searchInput');
+  const t = input.value.trim();
+  if (t && !trackTerms.some(x => x.toLowerCase() === t.toLowerCase())) {
+    trackTerms.push(t);
+  }
+  input.value = '';
 }
 
 // The full include model: array of non-empty OR-groups, AND-ed together. group[0] is the track box.
@@ -1262,11 +1328,12 @@ function updateUrl() {
     urlBox.style.color = 'var(--accent)';
   }
 
-  // Show the conditions builder once there's a track term or any condition in play.
-  const hasContent = getSearchTerm() !== '' || buildQuery() !== '';
+  // Show the rule builder once there's a track term or any rule in play.
+  const hasContent = trackTerms.length > 0 || getSearchTerm() !== '' || buildQuery() !== '';
   document.getElementById('queryControls').classList.toggle('visible', hasContent);
 
-  // Keep the plain-English summary and the technical query string in sync.
+  // Keep the track chips, plain-English summary and technical query in sync.
+  renderTrackChips();
   updateSummary();
   updateQueryPreview();
 
@@ -1337,7 +1404,6 @@ function updateSummary() {
 // CONDITIONS: open / remove / palette
 // ============================================
 
-const ADD_ROWS   = { also: 'alsoAddRow',  phrase: 'phraseAddRow',  exclude: 'excludeAddRow', sites: 'siteAddRow' };
 const ADD_INPUTS = { also: 'alsoAddInput', phrase: 'phraseAddInput', exclude: 'excludeAddInput', sites: 'siteAddInput' };
 
 function toggleCondPalette() {
@@ -1345,15 +1411,12 @@ function toggleCondPalette() {
 }
 
 function openCondition(type) {
-  document.getElementById('cond-' + type).style.display = 'block';
+  document.getElementById('cond-' + type).style.display = '';   // reveal the rule card + its AND spine
   document.getElementById('addCondPalette').classList.remove('open');
   refreshCondPalette();
-  // Reveal and focus the inline add input so the user can type straight away.
-  const row = document.getElementById(ADD_ROWS[type]);
-  row.style.display = 'inline-flex';
+  // Focus the card's add input so the user can type straight away.
   const input = document.getElementById(ADD_INPUTS[type]);
-  input.value = '';
-  input.focus();
+  if (input) { input.value = ''; input.focus(); }
 }
 
 function removeCondition(type) {
@@ -1384,6 +1447,12 @@ function renderChips(containerId, items, onRemove, opts) {
   const c = document.getElementById(containerId);
   c.innerHTML = '';
   items.forEach((t, i) => {
+    if (i > 0 && opts.sep) {
+      const s = document.createElement('span');
+      s.className = 'or-sep';
+      s.textContent = opts.sep;
+      c.appendChild(s);
+    }
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip ' + (opts.className || '');
@@ -1395,6 +1464,18 @@ function renderChips(containerId, items, onRemove, opts) {
   });
 }
 
+// The "Must mention" track card: committed OR chips + empty-state hint.
+function renderTrackChips() {
+  renderChips('trackChips', trackTerms, removeTrackTerm, { sep: 'or' });
+  document.getElementById('trackEmpty').style.display =
+    (trackTerms.length || getSearchTerm()) ? 'none' : 'block';
+}
+function removeTrackTerm(i) {
+  trackTerms.splice(i, 1);
+  showSuggestions();
+  updateUrl();
+}
+
 function renderCondition(type) {
   if (type === 'also') renderAlsoChips();
   else if (type === 'phrase') renderPhraseChips();
@@ -1404,7 +1485,7 @@ function renderCondition(type) {
 
 // --- Must also mention (andGroups[0]) ---
 function renderAlsoChips() {
-  renderChips('alsoChips', andGroups[0] || [], removeAlsoTerm, { className: '' });
+  renderChips('alsoChips', andGroups[0] || [], removeAlsoTerm, { sep: 'or' });
 }
 function commitAlsoTerm() {
   const input = document.getElementById('alsoAddInput');
@@ -1428,7 +1509,7 @@ function removeAlsoTerm(i) {
 
 // --- Exact phrase ---
 function renderPhraseChips() {
-  renderChips('phraseChips', phraseTerms, removePhraseTerm, { className: 'chip-phrase', wrap: t => '“' + t + '”' });
+  renderChips('phraseChips', phraseTerms, removePhraseTerm, { className: 'chip-phrase', wrap: t => '“' + t + '”', sep: 'and' });
 }
 function commitPhraseTerm() {
   const input = document.getElementById('phraseAddInput');
@@ -1445,7 +1526,7 @@ function removePhraseTerm(i) {
 
 // --- Only from these sites ---
 function renderSiteChips() {
-  renderChips('siteChips', siteTerms, removeSiteTerm, { className: 'chip-site' });
+  renderChips('siteChips', siteTerms, removeSiteTerm, { className: 'chip-site', sep: 'or' });
 }
 function commitSiteTerm() {
   const input = document.getElementById('siteAddInput');
@@ -1484,8 +1565,9 @@ function showSuggestions() {
 
   if (matches.length === 0) return;
 
+  const has = (s) => trackTerms.some(x => x.toLowerCase() === s.toLowerCase());
   matches.forEach(suggestion => {
-    const isSel = selectedTerms.includes(suggestion);
+    const isSel = has(suggestion);
     const chip = document.createElement('button');
     chip.className = 'chip' + (isSel ? ' selected' : '');
     chip.setAttribute('aria-pressed', isSel ? 'true' : 'false');
@@ -1493,48 +1575,21 @@ function showSuggestions() {
     chip.onclick = () => toggleTerm(suggestion);
     container.appendChild(chip);
   });
-
-  // Add custom term button
-  const addBtn = document.createElement('button');
-  addBtn.className = 'add-custom';
-  addBtn.innerHTML = '+ Custom term';
-  addBtn.onclick = addCustomTerm;
-  container.appendChild(addBtn);
 }
 
+// Add/remove a suggested wording from the track group. Leaves the typed word
+// in the box so the suggestion list stays put while you pick several.
 function toggleTerm(term) {
-  const idx = selectedTerms.indexOf(term);
-  if (idx >= 0) {
-    selectedTerms.splice(idx, 1);
-  } else {
-    selectedTerms.push(term);
-  }
+  const idx = trackTerms.findIndex(x => x.toLowerCase() === term.toLowerCase());
+  if (idx >= 0) trackTerms.splice(idx, 1);
+  else trackTerms.push(term);
   showSuggestions();
   updateUrl();
 }
 
-function addCustomTerm() {
-  const row = document.getElementById('customAddRow');
-  row.style.display = 'inline-flex';
-  const input = document.getElementById('customAddInput');
-  input.value = '';
-  input.focus();
-}
-
-function commitCustomTerm() {
-  const input = document.getElementById('customAddInput');
-  const term = input.value.trim();
-  if (term) {
-    customTerms.push(term);
-    updateUrl();
-  }
-  document.getElementById('customAddRow').style.display = 'none';
-  showSuggestions();
-}
-
 // --- Exclude ---
 function renderExcludeChips() {
-  renderChips('excludeChips', excludeTerms, removeExcludeTerm, { className: 'chip-exclude', prefix: '−' });
+  renderChips('excludeChips', excludeTerms, removeExcludeTerm, { className: 'chip-exclude', prefix: '−', sep: 'or' });
 }
 function commitExcludeTerm() {
   const input = document.getElementById('excludeAddInput');
@@ -1761,25 +1816,22 @@ function showToast(msg) {
 // EVENT LISTENERS
 // ============================================
 
-document.getElementById('searchInput').addEventListener('input', () => {
-  // Retyping the main term resets its suggestion-derived chips, but the
-  // conditions you've built (also-mention, phrases, excludes, sites) persist.
-  selectedTerms = [];
-  customTerms = [];
+const searchEl = document.getElementById('searchInput');
+searchEl.addEventListener('input', () => {
+  // The typed word feeds the preview live; committed chips and other rules persist.
   articles = [];
-  document.getElementById('customAddRow').style.display = 'none';
   showSuggestions();
   updateUrl();
 });
-
-// Transient "add custom variation" input: Enter commits, Escape hides the row.
-function wireInlineAdd(inputId, rowId, commit) {
-  document.getElementById(inputId).addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); commit(); }
-    else if (e.key === 'Escape') { document.getElementById(rowId).style.display = 'none'; }
-  });
-}
-wireInlineAdd('customAddInput', 'customAddRow', commitCustomTerm);
+// Press Enter to pin the typed word as a chip in the "Must mention" card.
+searchEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    commitTrackInput();
+    showSuggestions();
+    updateUrl();
+  }
+});
 
 // Condition add inputs stay open while their row is active: Enter commits, Escape clears.
 function wireConditionAdd(inputId, commit) {
