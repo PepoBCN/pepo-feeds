@@ -1466,17 +1466,19 @@
   <div class="card">
     <div class="card-label">Source</div>
     <div class="source-modes" id="sourceModes">
-      <button type="button" class="source-mode" id="mode-gdelt" data-mode="gdelt" onclick="setSourceMode('gdelt')">
-        <span class="sm-name">Broad index (recommended)</span>
-        <span class="sm-sub">All UK news, cleaned. Includes paywalled papers' headlines (Times, Telegraph).</span>
+      <button type="button" class="source-mode" id="mode-google" data-mode="google" onclick="setSourceMode('google')">
+        <span class="sm-name">All news (recommended)</span>
+        <span class="sm-sub">Broadest coverage — Google's index across UK outlets, including paywalled papers' headlines (Times, Telegraph, FT).</span>
       </button>
       <button type="button" class="source-mode" id="mode-trusted" data-mode="trusted" onclick="setSourceMode('trusted')">
         <span class="sm-name">Trusted titles</span>
         <span class="sm-sub">Pick specific publishers and read their own feeds, filtered by your terms.</span>
       </button>
-      <button type="button" class="source-mode" id="mode-google" data-mode="google" onclick="setSourceMode('google')">
-        <span class="sm-name">Google News</span>
-        <span class="sm-sub">Google's own index, with country and time-window controls.</span>
+      <!-- GDELT broad-index engine built but dormant: GDELT 429s Netlify's shared IP.
+           Re-enable by removing display:none once a rate-limited relay (Hetzner) is live. -->
+      <button type="button" class="source-mode" id="mode-gdelt" data-mode="gdelt" onclick="setSourceMode('gdelt')" style="display:none;">
+        <span class="sm-name">Broad index (GDELT)</span>
+        <span class="sm-sub">Dormant — needs a rate-limited relay (see repo notes).</span>
       </button>
     </div>
 
@@ -2583,7 +2585,7 @@ async function loadSourcesView() {
       if (RSS_HOLDOUT_TAGGED.has(domain.toLowerCase())) {
         const tag = document.createElement('span');
         tag.className = 'src-tag';
-        tag.textContent = 'via broad index';
+        tag.textContent = 'via broad search';
         item.appendChild(tag);
       }
 

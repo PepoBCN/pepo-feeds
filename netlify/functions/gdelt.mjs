@@ -1,6 +1,16 @@
 /*
  * gdelt.mjs — Netlify Function (v2)  [the "broad index" engine]
  *
+ * ⚠ STATUS: BUILT BUT DORMANT (not wired into the live UI).
+ *   GDELT rate-limits by IP (1 req / ~5-10s) and persistently 429s Netlify's SHARED
+ *   egress IP — so this returns empty from Netlify Functions. It WAS verified working
+ *   from a dedicated IP (Josh's Hetzner box, 178.104.151.104) when the rate limit is
+ *   respected. To activate: stand up a small always-on relay on Hetzner that queries
+ *   GDELT at <=1 call / ~10s + caches (~15min TTL), expose it over HTTP with a shared
+ *   secret, and point callGdelt() at the relay instead of api.gdeltproject.org. Then
+ *   un-hide the "Broad index (GDELT)" button in index.html. The live app currently uses
+ *   Google News (fetch-rss.mjs) for breadth, which works from Netlify.
+ *
  * The breadth source for Pepo Feeds, sitting alongside the Trusted-titles picker
  * (feed.mjs). Takes the rule-cards query the frontend already builds, translates it
  * into a GDELT DOC 2.0 query, fetches, cleans the firehose down to journalism using
