@@ -2766,9 +2766,14 @@ const SOURCE_CATEGORY_LABELS = {
   current_affairs: 'Current affairs',
   tech_science: 'Tech & science',
 };
-// Holdouts we tag "via broad index": no native RSS, only reachable through GDELT.
-// (The Sun is in the JSON list but is now a native feed, so we don't tag it.)
-const RSS_HOLDOUT_TAGGED = new Set(['thetimes.com', 'telegraph.co.uk', 'reuters.com', 'apnews.com', 'afp.com', 'dpa.com', 'efe.com', 'aa.com.tr', 'kyodonews.net', 'ptinews.com', 'pamediagroup.com', 'news.cn', 'tass.com', 'usatoday.com', 'newsweek.com', 'msnbc.com', 'pbs.org']);
+// "via broad search": sources with no usable native feed from our server (paywalled,
+// no RSS, or Cloudflare-blocks datacentre IPs). Verified by a Netlify-side audit of
+// every source. Untagged ⟺ a working native feed. (Catalogue feeds like The Sun /
+// Express stay untagged — they're verified working in the app.)
+const RSS_HOLDOUT_TAGGED = new Set([
+  'thetimes.com', 'telegraph.co.uk', 'reuters.com', 'apnews.com', 'afp.com', 'dpa.com', 'efe.com', 'aa.com.tr', 'kyodonews.net', 'ptinews.com', 'pamediagroup.com', 'news.cn', 'tass.com', 'usatoday.com', 'newsweek.com', 'msnbc.com', 'pbs.org',
+  'itv.com', 'channel4.com', 'lbc.co.uk', 'morningstaronline.co.uk', 'marketingweek.com', 'thelawyer.com', 'pulsetoday.co.uk', 'politicshome.com', 'thecritic.co.uk', 'sharecast.com', 'retail-week.com', 'building.co.uk', 'pressgazette.co.uk', 'thebookseller.com', 'fwi.co.uk', 'timeshighereducation.com', 'racingpost.com', 'tes.com', 'broadcastnow.co.uk', 'investorschronicle.co.uk', 'newstatesman.com', 'thebanker.com', 'prospectmagazine.co.uk', 'tortoisemedia.com', 'spectator.co.uk', 'sciencefocus.com',
+]);
 
 // Sources view is split across three tabs. Each tab owns an ordered list of
 // curated group keys; groups render inside that tab's own panel.
