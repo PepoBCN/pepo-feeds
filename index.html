@@ -1176,6 +1176,34 @@
       color: var(--text-dim);
       margin-bottom: 1.75rem;
     }
+    /* Sources tab bar (UK · US · Wires) */
+    .src-tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 1px solid var(--border-strong);
+      margin-bottom: 1.5rem;
+    }
+    .src-tab {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      padding: 0.55rem 0.95rem;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .src-tab:hover { color: var(--text); }
+    .src-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .src-panel { display: none; }
+    .src-panel.active { display: block; }
     .src-group { margin-bottom: 1.75rem; }
     .src-group-head {
       font-family: var(--serif);
@@ -1794,6 +1822,7 @@
   <h1>News sources</h1>
   <p class="sources-intro">The curated UK and US news titles, plus the global agencies and wires, that we treat as quality journalism. Anything outside this list still surfaces through "All news", which searches the whole index. Titles tagged "via broad search" have no native feed (paywalled or no RSS), so they only appear that way.</p>
   <div class="sources-count" id="sourcesCount"></div>
+  <div class="src-tabs" id="sourcesTabs" role="tablist" aria-label="Source regions"></div>
   <div id="sourcesBody"></div>
 </div>
 
@@ -2741,51 +2770,92 @@ const SOURCE_CATEGORY_LABELS = {
 // (The Sun is in the JSON list but is now a native feed, so we don't tag it.)
 const RSS_HOLDOUT_TAGGED = new Set(['thetimes.com', 'telegraph.co.uk', 'reuters.com', 'apnews.com', 'afp.com', 'dpa.com', 'efe.com', 'aa.com.tr', 'kyodonews.net', 'ptinews.com', 'pamediagroup.com', 'news.cn', 'tass.com', 'usatoday.com', 'newsweek.com', 'msnbc.com', 'pbs.org']);
 
-let sourcesLoaded = false;
+// Sources view is split across three tabs. Each tab owns an ordered list of
+// curated group keys; groups render inside that tab's own panel.
+const SOURCES_TABS = [
+  { id: 'uk',    label: 'UK',    noun: 'UK titles', groups: ['nationals', 'broadcasters_agencies', 'regional_city', 'business_finance', 'trade_specialist', 'current_affairs', 'tech_science'] },
+  { id: 'us',    label: 'US',    noun: 'US titles', groups: ['us_nationals', 'us_broadcasters'] },
+  { id: 'wires', label: 'Wires', noun: 'wires',     groups: ['news_agencies'] },
+];
 
-function openSources() {
+let sourcesLoaded = false;
+let sourcesData = null;        // cached /data/uk-sources.json once fetched
+let activeSourcesTab = 'uk';   // current tab id
+
+function isValidSourcesTab(id) {
+  return SOURCES_TABS.some(t => t.id === id);
+}
+
+// Show the Sources view in the DOM. `fromHistory` skips pushing a new URL
+// (used when responding to a deep-load or popstate, which already own the URL).
+function showSourcesView(fromHistory) {
   document.body.classList.add('sources-open');
   document.getElementById('sourcesView').classList.add('visible');
   window.scrollTo({ top: 0 });
   if (!sourcesLoaded) loadSourcesView();
+  if (!fromHistory) {
+    try {
+      history.pushState({}, '', '/sources' + (activeSourcesTab === 'uk' ? '' : '#' + activeSourcesTab));
+    } catch (e) { /* no-op */ }
+  }
 }
 
-function closeSources() {
+function openSources() {
+  showSourcesView(false);
+}
+
+// Hide the Sources view. `fromHistory` skips pushing '/' (popstate owns the URL).
+function closeSources(fromHistory) {
   document.body.classList.remove('sources-open');
   document.getElementById('sourcesView').classList.remove('visible');
+  if (!fromHistory) {
+    try { history.pushState({}, '', '/'); } catch (e) { /* no-op */ }
+  }
 }
 
-async function loadSourcesView() {
-  const body = document.getElementById('sourcesBody');
-  const countEl = document.getElementById('sourcesCount');
-  let data = null;
-  try {
-    const res = await fetch('/data/uk-sources.json');
-    if (res.ok) data = await res.json();
-  } catch (e) { data = null; }
+// Count the curated entries that live in a given tab's groups.
+function countSourcesTab(data, tab) {
+  if (!data || !data.curated) return 0;
+  return tab.groups.reduce((n, key) => {
+    const arr = data.curated[key];
+    return n + (Array.isArray(arr) ? arr.filter(o => o && o.name).length : 0);
+  }, 0);
+}
 
-  if (!data || !data.curated) {
-    body.innerHTML = '';
-    const err = document.createElement('div');
-    err.className = 'sources-error';
-    err.textContent = "Couldn't load the source list right now. Please try again later.";
-    body.appendChild(err);
-    return;
+// Build one source row (name link, domain, optional "via broad search" tag).
+function buildSourceItem(o) {
+  const item = document.createElement('div');
+  item.className = 'src-item';
+
+  const domain = String(o.domain || '').trim();
+  const link = document.createElement('a');
+  link.textContent = o.name;
+  const href = safeUrl(domain ? 'https://' + domain : '');
+  if (href) { link.href = href; link.target = '_blank'; link.rel = 'noopener'; }
+  item.appendChild(link);
+
+  if (domain) {
+    const dom = document.createElement('span');
+    dom.className = 'src-domain';
+    dom.textContent = domain;
+    item.appendChild(dom);
   }
-  sourcesLoaded = true;
-  body.innerHTML = '';
 
-  let total = 0;
+  if (RSS_HOLDOUT_TAGGED.has(domain.toLowerCase())) {
+    const tag = document.createElement('span');
+    tag.className = 'src-tag';
+    tag.textContent = 'via broad search';
+    item.appendChild(tag);
+  }
+  return item;
+}
 
-  // Render each curated category in the labelled order, falling back for any
-  // unexpected keys so nothing is silently dropped.
-  const keys = Object.keys(SOURCE_CATEGORY_LABELS)
-    .filter(k => Array.isArray(data.curated[k]))
-    .concat(Object.keys(data.curated).filter(k => !(k in SOURCE_CATEGORY_LABELS) && Array.isArray(data.curated[k])));
-
-  keys.forEach(key => {
+// Render the groups for one tab into its panel.
+function renderSourcesPanel(panel, data, tab) {
+  panel.innerHTML = '';
+  tab.groups.forEach(key => {
     const outlets = data.curated[key];
-    if (!outlets || !outlets.length) return;
+    if (!Array.isArray(outlets) || !outlets.length) return;
     const group = document.createElement('div');
     group.className = 'src-group';
 
@@ -2798,43 +2868,95 @@ async function loadSourcesView() {
     list.className = 'src-list';
     outlets.forEach(o => {
       if (!o || !o.name) return;
-      total++;
-      const item = document.createElement('div');
-      item.className = 'src-item';
-
-      const domain = String(o.domain || '').trim();
-      const link = document.createElement('a');
-      link.textContent = o.name;
-      const href = safeUrl(domain ? 'https://' + domain : '');
-      if (href) { link.href = href; link.target = '_blank'; link.rel = 'noopener'; }
-      item.appendChild(link);
-
-      if (domain) {
-        const dom = document.createElement('span');
-        dom.className = 'src-domain';
-        dom.textContent = domain;
-        item.appendChild(dom);
-      }
-
-      if (RSS_HOLDOUT_TAGGED.has(domain.toLowerCase())) {
-        const tag = document.createElement('span');
-        tag.className = 'src-tag';
-        tag.textContent = 'via broad search';
-        item.appendChild(tag);
-      }
-
-      list.appendChild(item);
+      list.appendChild(buildSourceItem(o));
     });
     group.appendChild(list);
-    body.appendChild(group);
+    panel.appendChild(group);
+  });
+}
+
+// Update #sourcesCount to reflect the active tab.
+function updateSourcesCount() {
+  const countEl = document.getElementById('sourcesCount');
+  if (!countEl || !sourcesData) return;
+  const tab = SOURCES_TABS.find(t => t.id === activeSourcesTab) || SOURCES_TABS[0];
+  const n = countSourcesTab(sourcesData, tab);
+  countEl.textContent = `${n} ${tab.noun}`;
+}
+
+// Show one tab's panel, update tab styling + count, and (optionally) the URL hash.
+function setSourcesTab(id, updateHistory) {
+  if (!isValidSourcesTab(id)) id = 'uk';
+  activeSourcesTab = id;
+
+  document.querySelectorAll('#sourcesTabs .src-tab').forEach(btn => {
+    const on = btn.dataset.tab === id;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('#sourcesBody .src-panel').forEach(p => {
+    p.classList.toggle('active', p.dataset.tab === id);
   });
 
-  const totalTitles = Object.values(data.curated)
-    .filter(Array.isArray)
-    .reduce((n, arr) => n + arr.length, 0);
-  countEl.textContent = `${totalTitles} curated UK & US titles`;
+  updateSourcesCount();
 
-  // "What we filter out" footer — a few denylist examples so the junk-control reads as real.
+  if (updateHistory) {
+    try {
+      history.replaceState({}, '', '/sources' + (id === 'uk' ? '' : '#' + id));
+    } catch (e) { /* no-op if history is unavailable */ }
+  }
+}
+
+async function loadSourcesView() {
+  const body = document.getElementById('sourcesBody');
+  const tabsEl = document.getElementById('sourcesTabs');
+  const countEl = document.getElementById('sourcesCount');
+  let data = sourcesData;
+  if (!data) {
+    try {
+      const res = await fetch('/data/uk-sources.json');
+      if (res.ok) data = await res.json();
+    } catch (e) { data = null; }
+  }
+
+  if (!data || !data.curated) {
+    if (tabsEl) tabsEl.innerHTML = '';
+    body.innerHTML = '';
+    const err = document.createElement('div');
+    err.className = 'sources-error';
+    err.textContent = "Couldn't load the source list right now. Please try again later.";
+    body.appendChild(err);
+    return;
+  }
+  sourcesData = data;
+  sourcesLoaded = true;
+
+  // Build the tab bar.
+  tabsEl.innerHTML = '';
+  SOURCES_TABS.forEach(tab => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'src-tab';
+    btn.dataset.tab = tab.id;
+    btn.textContent = tab.label;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', 'false');
+    btn.addEventListener('click', () => setSourcesTab(tab.id, true));
+    tabsEl.appendChild(btn);
+  });
+
+  // Build one panel per tab.
+  body.innerHTML = '';
+  SOURCES_TABS.forEach(tab => {
+    const panel = document.createElement('div');
+    panel.className = 'src-panel';
+    panel.dataset.tab = tab.id;
+    panel.setAttribute('role', 'tabpanel');
+    renderSourcesPanel(panel, data, tab);
+    body.appendChild(panel);
+  });
+
+  // "What we filter out" footer — shown once below the tabs, on every tab.
   const note = document.createElement('div');
   note.className = 'sources-filter-note';
   const strong = document.createElement('strong');
@@ -2844,6 +2966,9 @@ async function loadSourcesView() {
     'socials, PR wires and aggregators (X, Facebook, PR Newswire, EIN, MSN…) are dropped from every Broad index feed, so you only ever see real journalism.'
   ));
   body.appendChild(note);
+
+  // Activate the current tab (no history write — routing owns the URL).
+  setSourcesTab(activeSourcesTab, false);
 }
 
 // ============================================
@@ -3514,11 +3639,48 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.body.classList.contains('sources-open')) closeSources();
 });
 
+// --- /sources routing (SPA over the Netlify rewrite) ---
+// Read the current path/hash and sync the Sources view + active tab to it,
+// without writing any history (the caller's navigation already did).
+function syncSourcesFromLocation() {
+  let onSources = false;
+  try {
+    onSources = location.pathname === '/sources' || location.pathname.indexOf('/sources') === 0;
+  } catch (e) { onSources = false; }
+
+  if (onSources) {
+    let tab = 'uk';
+    try {
+      const h = (location.hash || '').replace(/^#/, '');
+      if (isValidSourcesTab(h)) tab = h;
+    } catch (e) { tab = 'uk'; }
+    activeSourcesTab = tab;
+    showSourcesView(true);
+    setSourcesTab(tab, false);
+  } else if (document.body.classList.contains('sources-open')) {
+    closeSources(true);
+  }
+}
+
+// Back/forward: re-derive view + tab from the URL. Never push from here.
+window.addEventListener('popstate', () => {
+  try { syncSourcesFromLocation(); } catch (e) { /* no-op */ }
+});
+
 // Init
 goToStep(1);            // default to Step ① and set the indicator state
 updateUrl();
 renderSavedFeeds();
 loadTrustedCatalog();   // renders the Trusted titles picker only if the catalog loads
+
+// Deep-load: if we arrived at /sources (optionally #us / #wires), open the
+// Sources view on the right tab instead of the builder. loadSourcesView()
+// fetches its own JSON and applies activeSourcesTab once ready.
+try {
+  if (location.pathname === '/sources' || location.pathname.indexOf('/sources') === 0) {
+    syncSourcesFromLocation();
+  }
+} catch (e) { /* no-op — fall back to the builder */ }
 
 // Focus the search box on load, but only on wider screens so mobile
 // doesn't get an unsolicited keyboard pop.
