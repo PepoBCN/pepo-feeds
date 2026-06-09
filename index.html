@@ -1851,6 +1851,76 @@ function buildQuery() {
   return fragments.join(' ').trim();
 }
 
+// Quote a term for Guardian API q syntax (multi-word -> "phrase"). Strips any inner quotes.
+function guardianQuote(t) {
+  t = String(t).trim();
+  if (!t) return '';
+  return /\s/.test(t) ? `"${t.replace(/"/g, '')}"` : t;
+}
+
+// Compile the POSITIVE search terms into Guardian API q syntax.
+// Guardian supports AND, OR, NOT, "quotes", parentheses.
+//   each "All" word  -> AND-joined required term (multi-word quoted)
+//   the "Any" words  -> one OR-group (a OR b)
+//   each phrase      -> quoted
+//   join positives with AND, then append " NOT term" per excludeTerms.
+// MAY return '' (Guardian + no topic word = the Guardian's latest, a valid feed).
+function buildGuardianQuery() {
+  const positives = [];
+
+  // 1. "All of these words" — each its own required AND term.
+  allWordsTerms().forEach(t => {
+    const q = guardianQuote(t);
+    if (q) positives.push(q);
+  });
+
+  // 2. "Any of these words" — one OR group.
+  if (anyTerms.length) {
+    const parts = anyTerms.map(guardianQuote).filter(Boolean);
+    if (parts.length === 1) positives.push(parts[0]);
+    else if (parts.length > 1) positives.push('(' + parts.join(' OR ') + ')');
+  }
+
+  // 3. Exact phrases — each always quoted.
+  phraseTerms.forEach(p => {
+    const t = String(p).trim().replace(/"/g, '');
+    if (t) positives.push(`"${t}"`);
+  });
+
+  let q = positives.join(' AND ');
+
+  // 4. Exclusions — " NOT term" each (multi-word quoted).
+  excludeTerms.forEach(t => {
+    const term = guardianQuote(t);
+    if (term) q += ' NOT ' + term;
+  });
+
+  return q.trim();
+}
+
+// True iff the sole chosen publisher is The Guardian.
+// Normalises: lowercase, strip leading "www.", strip any path/trailing slash.
+function isGuardianOnly() {
+  if (siteTerms.length !== 1) return false;
+  let d = String(siteTerms[0] || '').trim().toLowerCase();
+  d = d.replace(/^www\./, '').split('/')[0];
+  return d === 'theguardian.com';
+}
+
+// Relative endpoint path for the current feed, or '' if there's no feed.
+//   no positive term            -> '' (empty-state, unchanged)
+//   Guardian-only publisher     -> /.netlify/functions/guardian?q=...&when=...
+//   otherwise                   -> /.netlify/functions/fetch-rss?url=<Google News>
+function feedPath() {
+  if (buildQuery() === '') return '';
+  if (isGuardianOnly()) {
+    const whenVal = document.getElementById('whenSelect').value;
+    return '/.netlify/functions/guardian?q=' + encodeURIComponent(buildGuardianQuery()) +
+      (whenVal ? '&when=' + encodeURIComponent(whenVal) : '');
+  }
+  return '/.netlify/functions/fetch-rss?url=' + encodeURIComponent(buildUrl());
+}
+
 // Build the subscribable Google News RSS URL from the compiled query + Country/Time.
 function buildUrl() {
   const query = buildQuery();
@@ -1880,9 +1950,8 @@ function buildUrl() {
 // through our proxy so it's de-duped (and stays clean) in their reader, not just
 // the live preview. Absolute so it works when pasted anywhere.
 function subscribableUrl() {
-  const gn = buildUrl();
-  if (!gn) return '';
-  return location.origin + '/.netlify/functions/fetch-rss?url=' + encodeURIComponent(gn);
+  const p = feedPath();
+  return p ? location.origin + p : '';
 }
 
 function updateUrl() {
@@ -1910,8 +1979,9 @@ function updateUrl() {
 
   // Debounced preview
   clearTimeout(previewTimeout);
-  if (url) {
-    previewTimeout = setTimeout(() => fetchPreview(url), 600);
+  const path = feedPath();
+  if (path) {
+    previewTimeout = setTimeout(() => fetchPreview(path), 600);
   } else {
     document.getElementById('previewArea').innerHTML = '<div class="preview-empty">Add a term above to see a live preview</div>';
   }
@@ -2544,13 +2614,13 @@ async function fetchJsonWithTimeout(u, ms) {
   }
 }
 
-async function fetchPreview(url) {
+async function fetchPreview(proxyUrl) {
   const previewArea = document.getElementById('previewArea');
   previewArea.innerHTML = '<div class="preview-loading"><div class="spinner"></div><br>Fetching feed...</div>';
 
-  // Google News feed via our proxy, with a third-party CORS proxy fallback.
+  // proxyUrl is the relative feed endpoint (Google News via fetch-rss, or the
+  // Guardian function) — both return standard RSS 2.0, so the parser below is unchanged.
   let xmlText = null;
-  const proxyUrl = `/.netlify/functions/fetch-rss?url=${encodeURIComponent(url)}`;
 
   // Try our own proxy first, retrying once — the Netlify function can be slow
   // on a cold start, which previously surfaced as a one-off "couldn't load".
@@ -2562,11 +2632,15 @@ async function fetchPreview(url) {
     }
   }
 
-  // Last resort: third-party CORS proxy.
+  // Last resort: third-party CORS proxy. Only applies to the Google News path —
+  // we recover the raw Google News URL from the fetch-rss proxy query string.
   if (xmlText === null) {
-    try {
-      xmlText = await fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), 12000);
-    } catch (e) { xmlText = null; }
+    const m = proxyUrl.match(/^\/\.netlify\/functions\/fetch-rss\?url=(.+)$/);
+    if (m) {
+      try {
+        xmlText = await fetchWithTimeout('https://api.allorigins.win/raw?url=' + m[1], 12000);
+      } catch (e) { xmlText = null; }
+    }
   }
 
   if (xmlText === null) {
