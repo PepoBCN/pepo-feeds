@@ -1872,6 +1872,15 @@ function buildUrl() {
   return url;
 }
 
+// The URL the user actually subscribes to / copies. Routes the Google News feed
+// through our proxy so it's de-duped (and stays clean) in their reader, not just
+// the live preview. Absolute so it works when pasted anywhere.
+function subscribableUrl() {
+  const gn = buildUrl();
+  if (!gn) return '';
+  return location.origin + '/.netlify/functions/fetch-rss?url=' + encodeURIComponent(gn);
+}
+
 function updateUrl() {
   const url = buildUrl();
   const urlBox = document.getElementById('urlBox');
@@ -1880,7 +1889,7 @@ function updateUrl() {
     urlBox.textContent = 'Add a term above to get started…';
     urlBox.style.color = 'var(--text-dim)';
   } else {
-    urlBox.textContent = url;
+    urlBox.textContent = subscribableUrl();
     urlBox.style.color = 'var(--accent)';
   }
 
@@ -2472,7 +2481,7 @@ function removeExcludeTerm(idx) {
 }
 
 function copyUrl() {
-  const url = buildUrl();
+  const url = subscribableUrl();
   if (!url) return;
 
   const done = () => {
@@ -2874,7 +2883,7 @@ function commitSaveFeed() {
   } else {
     folderId = sel.value;
   }
-  saved.feeds.push({ id: uid(), name, folderId, url: buildUrl(), state: currentBuilderState() });
+  saved.feeds.push({ id: uid(), name, folderId, url: subscribableUrl(), state: currentBuilderState() });
   persistSaved();
   document.getElementById('saveForm').style.display = 'none';
   document.getElementById('saveFeedName').value = '';
