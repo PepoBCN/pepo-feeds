@@ -1009,6 +1009,11 @@
       font-style: italic;
       margin-top: 0.45rem;
     }
+    .track-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin: 0.15rem 0 0.8rem;
+    }
     .ai-or {
       display: flex;
       align-items: center;
@@ -1512,16 +1517,7 @@
   <!-- Step 1: Search -->
   <div class="card">
     <label class="card-label" for="searchInput">What do you want to track?</label>
-
-    <!-- AI "describe it" bar — fills the rule cards below from plain English -->
-    <div class="ai-bar">
-      <span class="ai-bar-spark">✦</span>
-      <input type="text" id="aiInput" placeholder="Describe your feed in plain English…" aria-label="Describe your feed in plain English" autocomplete="off">
-      <button type="button" class="ai-bar-go" id="aiGo" onclick="runAiParse()">Build</button>
-    </div>
-    <div class="ai-status" id="aiStatus" aria-live="polite"></div>
-    <div class="ai-hint-eg">e.g. “Tesla &amp; Musk, must mention earnings, exclude opinion and Tesla's own site”</div>
-    <div class="ai-or"><span>or build it by hand</span></div>
+    <p class="track-hint">Type a word or name and press Enter to add it. Add more rules below to narrow it down.</p>
 
     <div class="search-wrap">
       <input type="text" id="searchInput" placeholder="Type a word and press Enter…" aria-label="Search term" autocomplete="off">
@@ -3625,15 +3621,6 @@ function applyParsedState(s) {
   const stack = document.querySelector('.rule-stack');
   if (stack) { stack.classList.remove('ai-filled'); void stack.offsetWidth; stack.classList.add('ai-filled'); }
 }
-
-document.getElementById('aiInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); runAiParse(); }
-});
-// Clear any stale error/status as soon as the user starts typing again.
-document.getElementById('aiInput').addEventListener('input', () => {
-  const st = document.getElementById('aiStatus');
-  if (st.textContent) st.textContent = '';
-});
 
 // Sources link: keyboard activation (it's a link styled as a button).
 document.getElementById('sourcesLink').addEventListener('keydown', (e) => {
